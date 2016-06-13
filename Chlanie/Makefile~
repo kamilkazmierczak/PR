@@ -1,0 +1,2 @@
+program:
+	mpic++ -std=c++0x chlanie.cpp -o a
