@@ -11,10 +11,11 @@
 #define INVITATION 100
 #define CONFIRMATION 110
 using namespace std;
-const int probability = 30;
+const int probability = 60;
 
 //globlas
 int invitationCounter = 0;
+int confirmationCounter = 0;
 int invitationSuccessCounter = 0;
 
 int bestStudent = -1;
@@ -32,6 +33,8 @@ string state;
 struct msg {
     int value;
     int studentClock;
+    int bestStudent;
+    int bestClock;
 };
 
 void sendInvitation();
@@ -62,21 +65,13 @@ int main(int argc, char **argv)
     if(state == "free"/*wantToDrink==0*/ && (rand() % 100) <probability){
       wantToDrink = 1;
       sendInvitation();
-      wantToDrink = 0;
       state = "wait for response";
     }else if(state=="free"){
       studentClock++;
-      continue;
-      //sendInvitation();
+      sendInvitation();
+      state = "wait for response";
     }
 
-
-
-    //if (wantToDrink == 1) {
-
-
-
-    //}
 
     MPI_Recv(&buf, sizeof(msg), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
     receive(buf);
@@ -85,21 +80,26 @@ int main(int argc, char **argv)
 
     printf("%d: beststudent = %d\n",tid,bestStudent);
 
-    if (invitationCounter >= size-1 && invitationSuccessCounter > 0) {
+    if (invitationCounter >= size-1 ) {
 
-  //  printf("%d: Hurraaa :) succCounter = %d beststudent=%d\t",tid,invitationSuccessCounter,bestStudent);
-    string concat = "";
-    for( int i = 0; i < team.size(); i++ ){
-      concat+=to_string(team.at(i));
-      concat+=";";
-      //printf("%d;",team.at(i));
-    }
-    //concat+="\n";
-    printf("%d: Hurraaa :) succCounter = %d beststudent=%d\t %s\n",tid,invitationSuccessCounter,bestStudent,concat.c_str());
-    //printf("%s\n",concat.c_str());
+    //  printf("%d: Hurraaa :) succCounter = %d beststudent=%d\t",tid,invitationSuccessCounter,bestStudent);
 
-    state = "send confirmation";
-    confirmInvitation();
+      //printf("%s\n",concat.c_str());
+      if(invitationSuccessCounter > 0){
+        state = "send confirmation";
+        string concat = "";
+        for( int i = 0; i < team.size(); i++ ){
+          concat+=to_string(team.at(i));
+          concat+=";";
+          //printf("%d;",team.at(i));
+        }
+        //concat+="\n";
+        printf("%d: Hurraaa :) succCounter = %d beststudent=%d\t %s\n",tid,invitationSuccessCounter,bestStudent,concat.c_str());
+        confirmInvitation();
+      }
+      else {
+        state = "free";
+      }
     }
 
 
@@ -116,11 +116,11 @@ void sendInvitation(){
   myMsg.value = wantToDrink;
   sendClock = myMsg.studentClock;
 
-  if (wantToDrink == 1) {
+  //if (wantToDrink == 1) {
     for( int i = 0; i < processedInvitations.size(); i++ ){
       processedInvitations.at(i) = true;
     }
-  }
+//  }
 
 
   for (int i=0; i<size; i++) {
@@ -151,9 +151,14 @@ void sendResponseToInvitation(int id){
 
 void confirmInvitation(){
   //wysylamy bestClocka i bestStudenta porownujemy do naszych aby dowiedziec sie czy mamy aktualne dane
-  for (int i=0; i<team.size() ;i++) {
+  msg myMsg;
+  myMsg.bestClock = bestClock;
+  myMsg.bestStudent = bestStudent;
 
+  for (int i=0; i<team.size() ;i++) {
+      MPI_Send(&myMsg, sizeof(msg), MPI_BYTE, team.at(i), CONFIRMATION, MPI_COMM_WORLD);
   }
+  confirmationCounter = 0;
 }
 
 void receive(msg buf){
@@ -166,13 +171,10 @@ void receive(msg buf){
   switch (status.MPI_TAG) {
     case INVITATION:
       if (processedInvitations.at(id) == true) {
-        if (buf.value == 0 && buf.studentClock < sendClock) {
-          return;
-        }
         processedInvitations.at(id) = false;
         if (state == "wait for response") {
           invitationCounter++;
-          if (buf.value == 1) {
+          if (buf.value == 1 && wantToDrink) {
             invitationSuccessCounter++;
             team.push_back(id);
             if (buf.studentClock < bestClock || (buf.studentClock == bestClock && bestStudent > id )) {

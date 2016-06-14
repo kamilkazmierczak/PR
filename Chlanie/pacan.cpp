@@ -4,7 +4,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <vector>
-#include <algorithm>  
+#include <algorithm>
 
 //<----PARAMETRY
 #define GUIDES 2
@@ -36,7 +36,7 @@ struct tripData {
     int guideId;
     int amount;
     int type;
-    
+
     bool operator<(const tripData& a) const
     {
         if (time == a.time){
@@ -49,7 +49,7 @@ struct tripData {
 };
 
 //<-----ZMIENNE GLOBALNE
-int myguide = -1; 
+int myguide = -1;
 int ourTime = 0;
 int tid;
 int size;
@@ -81,7 +81,7 @@ void deleteMyConfirm(){
     for (int i=0; i<queue.size(); i++){
         if (queue[i].type == CONFIRM){
             queue.erase(queue.begin()+i);
-            i--; 
+            i--;
         }
     }
 }
@@ -108,11 +108,11 @@ void sendRequest(){
     data.owner = tid;
     data.type = REQUEST;
     data.time = ourTime;
-    
+
     #ifdef SEND_LOG
     printf("%d: Wysylamy REQUEST\n", tid);
     #endif
-    
+
     for (int i=0; i<size; i++){
         MPI_Send(&data, sizeof( struct tripData ), MPI_BYTE, i, REQUEST, MPI_COMM_WORLD);
     }
@@ -122,14 +122,14 @@ void sendRequest(){
 void sendGuideInfo(){
     tripData data;
     data.guideId = myguide;
-    data.owner = tid; 
+    data.owner = tid;
     data.type = GUIDEINFO;
     data.time = -1; //Niepotrzebny poniewaz nie wpisujemy tej informacji do zadnej z kolejek
-    
+
     #ifdef SEND_LOG
     printf("%d: Wysylamy GUIDEINFO dla %d\n", tid,myguide);
     #endif
-    
+
     for (int i=0; i<size; i++){
          MPI_Send(&data, sizeof( struct tripData ), MPI_BYTE, i, GUIDEINFO, MPI_COMM_WORLD);
     }
@@ -141,12 +141,12 @@ void sendTripStart(){
     data.owner = tid;
     data.type = TRIPSTART;
     data.time = -1; //
-    
+
     #ifdef SEND_LOG
     printf("%d: Wysylamy TRIPSTART\n", tid);
     #endif
     for (int i=0; i<size; i++){
-        MPI_Send(&data, sizeof( struct tripData ), MPI_BYTE, i, TRIPSTART, MPI_COMM_WORLD); 
+        MPI_Send(&data, sizeof( struct tripData ), MPI_BYTE, i, TRIPSTART, MPI_COMM_WORLD);
     }
 }
 
@@ -156,19 +156,19 @@ void sendTripEnd(){
     data.owner = tid;
     data.type = TRIPEND;
     data.time = -1; //
-    
+
     #ifdef SEND_LOG
     printf("%d: Wysylamy TRIPEND\n", tid);
     #endif
     for (int i=0; i<size; i++){
-        MPI_Send(&data, sizeof( struct tripData ), MPI_BYTE, i, TRIPEND, MPI_COMM_WORLD); 
+        MPI_Send(&data, sizeof( struct tripData ), MPI_BYTE, i, TRIPEND, MPI_COMM_WORLD);
     }
 }
 
 void handle(tripData data){
     // Synchronizacja zegara
     ourTime = max(data.time, ourTime) + 1;
-    
+
     if (status.MPI_TAG == REQUEST){
         #ifdef RECEIVE_LOG
         printf("%d: Otrzymano wiadomosc typu REQUEST od %d\n", tid, data.owner);
@@ -178,14 +178,14 @@ void handle(tripData data){
             dataToInsert.owner = data.owner;
             dataToInsert.type = REQUEST;
             dataToInsert.time = data.time;
-            
+
             //Umieszczenie w kolejce i posortowanie
             //Jesli REQUEST nie dotyczy naszego przewodnika to nie zapisujemy tego w kolejce
             //if(data.guideId == myguide){
                 queue.push_back(dataToInsert);
                 std::sort(queue.begin(), queue.end());
             //}
-            
+
             //Nie wysylamy potwierdzenia do siebie
             if(data.owner != tid){
             //Przygotowanie do wyslania CONFIRM
@@ -193,7 +193,7 @@ void handle(tripData data){
                 dataToInsert.type = CONFIRM;
                 dataToInsert.owner = tid;
                 MPI_Send(&dataToInsert, sizeof( struct tripData ), MPI_BYTE, status.MPI_SOURCE, CONFIRM, MPI_COMM_WORLD);
-            }       
+            }
     }
     else if (status.MPI_TAG == CONFIRM){
         queue.push_back(data);
@@ -203,9 +203,9 @@ void handle(tripData data){
         #ifdef RECEIVE_LOG
         printf("%d: Otrzymano wiadomosc typu GUIDEINFO od %d (guide = %d)\n", tid, data.owner, data.guideId);
         #endif
-     
+
         tickets[data.guideId].pop_back();
-        
+
         //if(data.guideId == myguide){
             //Usuniecie zadania ownera z kolejki
             for (int i=0; i<queue.size(); i++){
@@ -231,7 +231,7 @@ void handle(tripData data){
         }
     }
     else if (status.MPI_TAG == TRIPEND){
-    
+
         for(int i=0; i<GROUPSIZE; i++){
             tickets[data.guideId].push_back(1);
         }
@@ -277,11 +277,11 @@ bool isConfirmed(){
     int timestamp = -1;
     for(int i=0; i < queue.size(); i++){
         if((queue[i].owner == tid) && (queue[i].type == REQUEST)){
-            timestamp = queue[i].time; 
+            timestamp = queue[i].time;
             break;
         }
     }
-    
+
     int confirmCounter = 0;
     bool result = true;
     for(int i=0; i < queue.size(); i++){
@@ -295,7 +295,7 @@ bool isConfirmed(){
             }
         }
     }
-    
+
     if ((confirmCounter == (size - 1)) && result){
         return true;
     }
@@ -307,19 +307,19 @@ bool isConfirmed(){
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
-    
+
     MPI_Comm_size( MPI_COMM_WORLD, &size );
 	MPI_Comm_rank( MPI_COMM_WORLD, &tid );
-    
+
     tripData data;
-    
+
     srand(tid);
-    
+
     fillTickets();
-    
+
     while(1){
         usleep( rand()%50000 );
-        
+
         //Wybieranie przewodnika
         if (myguide == -1){
             //<---
@@ -337,9 +337,9 @@ int main(int argc, char **argv)
             sendRequest();
         }
 
-        MPI_Recv( &data, sizeof( struct tripData), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        MPI_IRecv( &data, sizeof( struct tripData), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         handle(data);
-        
+
         //Wchodzenie do sekcji krytycznej
         #ifdef MAIN
         //printf("%d: isFirst() = %d, isConfirmed() = %d\n", tid, isFirst(), isConfirmed());
@@ -359,7 +359,7 @@ int main(int argc, char **argv)
             printf("%d: Wyjscie z sekcji krytycznej\n",tid);
             #endif
         }
-        
+
 
         //Pierwszy turysta rozpoczyna wycieczke gdy jest odpowiednia liczba w grupie
         if(firstTourist && (checkAmountOfGuides() == 0) && !started){
@@ -367,6 +367,6 @@ int main(int argc, char **argv)
             started = true;
         }
     }
-        
+
     MPI_Finalize();
 }
